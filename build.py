@@ -7,7 +7,8 @@ import zipfile
 root = Path(__file__).resolve().parent
 out = root / 'dist'
 out.mkdir(exist_ok=True)
-destination = out / 'ace6t-discover-1.0.0.zip'
+properties = dict(line.split('=', 1) for line in (root / 'module/module.prop').read_text().splitlines() if '=' in line)
+destination = out / f"ace6t-discover-{properties['version']}.zip"
 with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
     for path in sorted((root / 'module').iterdir()):
         if not path.is_file():

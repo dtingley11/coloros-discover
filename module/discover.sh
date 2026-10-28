@@ -11,7 +11,7 @@ EMPTY='No result found.'
 
 log() { printf '%s %s\n' "$(/system/bin/date -u +%FT%TZ)" "$*"; }
 fail() { log "ERROR: $*"; return 1; }
-enabled() { [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ]; }
+enabled() { [ -f "$MODDIR/module.prop" ] && [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ]; }
 query() {
     /system/bin/timeout 10 /system/bin/content query --user 0 --uri "$URI" --where "featurename='$1'"
 }
@@ -82,6 +82,13 @@ apply_feature() {
 }
 boot_apply() {
     guard && enabled || return 1
+    log "Boot settings before unlock: type=$(/system/bin/timeout 10 /system/bin/settings --user 0 get secure assistant_screen_type) left=$(/system/bin/timeout 10 /system/bin/settings --user 0 get secure assistant_screen_type_left_enable)"
+    log 'Waiting for user 0 credential storage (first unlock)'
+    while [ "$(/system/bin/getprop sys.user.0.ce_available)" != true ]; do
+        enabled || return 0
+        /system/bin/sleep 2
+    done
+    log 'Credential storage ready; waiting for feature/settings initialization'
     # Allow asynchronous ColorOS feature initialization to finish. Require
     # repeated identical states, bounded to 30 samples rather than a daemon.
     /system/bin/sleep 8
@@ -90,7 +97,7 @@ boot_apply() {
     sample=0
     while [ "$sample" -lt 30 ]; do
         enabled || return 0
-        if read_state; then
+        if read_state && feed_settings_ok; then
             if [ "$state" = "$previous" ]; then stable=$((stable + 1)); else stable=0; fi
             previous=$state
             [ "$stable" -ge 2 ] && break
