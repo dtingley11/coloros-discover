@@ -5,6 +5,8 @@ Enables Google Discover in the stock ColorOS launcher after each boot.
 Tested on **OnePlus Ace 6T (PLR110), ColorOS 16.0.10.500(CN01)**.
 Requires root, a KernelSU-compatible module manager, and the Google app.
 
+First, turn off **Quick Glance** in Settings.
+
 Set the required secure settings using ADB with root:
 
 ```sh
