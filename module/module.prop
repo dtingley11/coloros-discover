@@ -2,5 +2,5 @@ id=ace6t_discover
 name=Ace 6T Stock Launcher Discover
 version=1.0.2
 versionCode=3
-author=Ace6T Discover contributors
+author=dtingley11
 description=Reapplies one launcher feature record after boot on PLR110 ColorOS 16.0.10.500(CN01). Script only; no ongoing monitoring.
