@@ -20,5 +20,3 @@ The launcher refresh keeps your current app in front.
 
 The module changes one launcher feature record and exits. To restore
 Quick Glance, disable or remove the module and reboot.
-
-Author: **dtingley11**
