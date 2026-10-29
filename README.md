@@ -15,7 +15,8 @@ adb shell "su -c 'settings --user 0 put secure assistant_screen_type_left_enable
 ```
 
 Build with `python3 build.py`, install the ZIP from `dist/`, then reboot.
-Allow about 20–30 seconds after boot for Discover to appear.
+Discover is enabled once the feature provider and feed settings are ready.
+The launcher refresh keeps your current app in front.
 
 The module changes one launcher feature record and exits. To restore
 Quick Glance, disable or remove the module and reboot.

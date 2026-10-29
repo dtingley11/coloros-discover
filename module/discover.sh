@@ -7,20 +7,18 @@ CN='com.android.launcher.CN_VERSION'
 GOOGLE='com.android.launcher.OVERLAY_GOOGLE_DISCOVER'
 CN_ROW="Row: 0 _id=245, featurename=$CN, parameters=NULL, lists=NULL"
 GOOGLE_ROW="Row: 0 _id=245, featurename=$GOOGLE, parameters=NULL, lists=NULL"
-EMPTY='No result found.'
 
 log() { printf '%s %s\n' "$(/system/bin/date -u +%FT%TZ)" "$*"; }
 fail() { log "ERROR: $*"; return 1; }
 enabled() { [ -f "$MODDIR/module.prop" ] && [ ! -e "$MODDIR/disable" ] && [ ! -e "$MODDIR/remove" ]; }
-query() {
-    /system/bin/timeout 10 /system/bin/content query --user 0 --uri "$URI" --where "featurename='$1'"
-}
 read_state() {
-    cn_row=$(query "$CN") || return 1
-    google_row=$(query "$GOOGLE") || return 1
-    if [ "$cn_row" = "$CN_ROW" ] && [ "$google_row" = "$EMPTY" ]; then
+    # Fetch both names and the guarded row in one provider call. Extra or
+    # altered records still fail the exact comparison below.
+    feature_row=$(/system/bin/timeout 10 /system/bin/content query --user 0 --uri "$URI" \
+        --where "_id=245 OR featurename='$CN' OR featurename='$GOOGLE'") || return 1
+    if [ "$feature_row" = "$CN_ROW" ]; then
         state=stock
-    elif [ "$cn_row" = "$EMPTY" ] && [ "$google_row" = "$GOOGLE_ROW" ]; then
+    elif [ "$feature_row" = "$GOOGLE_ROW" ]; then
         state=discover
     else
         state=unexpected
@@ -47,9 +45,21 @@ rename() {
         --where "_id=245 AND featurename='$1' AND parameters IS NULL AND lists IS NULL"
 }
 restart_launcher() {
-    /system/bin/timeout 10 /system/bin/am force-stop --user 0 com.android.launcher &&
-    /system/bin/timeout 10 /system/bin/am start --user 0 \
-        -a android.intent.action.MAIN -c android.intent.category.HOME -p com.android.launcher
+    foreground=$(/system/bin/timeout 10 /system/bin/dumpsys activity activities) || return 1
+    foreground=$(printf '%s\n' "$foreground" | /system/bin/grep 'topResumedActivity=')
+    relaunch_home=0
+    case "$foreground" in
+        *'
+'*) ;; # Multiple resumed displays: do not choose a foreground app for the user.
+        *' u0 com.android.launcher/'*) relaunch_home=1 ;;
+    esac
+    /system/bin/timeout 10 /system/bin/am force-stop --user 0 com.android.launcher || return 1
+    if [ "$relaunch_home" = 1 ]; then
+        /system/bin/timeout 10 /system/bin/am start --user 0 \
+            -a android.intent.action.MAIN -c android.intent.category.HOME -p com.android.launcher
+    else
+        log 'Launcher stopped in background; keeping the current app in front'
+    fi
 }
 restore_feature() {
     guard || return 1
@@ -78,31 +88,30 @@ apply_feature() {
         fail 'Launcher restart failed; attempted inverse rename'
         return 1
     fi
-    log 'Discover feature verified; launcher restarted'
+    log 'Discover feature verified; launcher refreshed'
 }
 boot_apply() {
     guard && enabled || return 1
     log 'Waiting for feature/settings initialization after boot'
-    # Allow asynchronous ColorOS feature initialization to finish. Require
-    # repeated identical states, bounded to 30 samples rather than a daemon.
-    /system/bin/sleep 8
+    # Check readiness immediately, then require three matching samples.
+    # Polling is bounded to 30 samples rather than a daemon.
     previous=''
     stable=0
     sample=0
     while [ "$sample" -lt 30 ]; do
         enabled || return 0
-        if read_state && feed_settings_ok; then
+        if read_state; then
             if [ "$state" = "$previous" ]; then stable=$((stable + 1)); else stable=0; fi
             previous=$state
-            [ "$stable" -ge 2 ] && break
+            if [ "$stable" -ge 2 ] && feed_settings_ok; then break; fi
         else
             stable=0
             previous=''
         fi
         sample=$((sample + 1))
-        /system/bin/sleep 2
+        /system/bin/sleep 1
     done
-    [ "$stable" -ge 2 ] || { fail 'Feature provider did not settle; no change made'; return 1; }
+    [ "$sample" -lt 30 ] || { fail 'Feature provider/settings did not settle; no change made'; return 1; }
     apply_feature || return 1
     # Brief verification during this boot only. No launcher/process watcher.
     for delay in 2 8; do
